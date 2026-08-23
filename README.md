@@ -10,11 +10,49 @@ scaffolding outside this codebase.
 Author: **Cristian Mendoza** · [openbeta.finance](https://openbeta.finance)
 · licensed **AGPL-3.0-or-later** (see [License](#license))
 
-## Pipeline (target architecture)
+## Pipeline
 
-```
-OHLCV CSV → feature computation → standardization → HNSW index → density
-(daily)     (sliding window)      (z-score)         (custom)     clustering → dump for viz
+```mermaid
+flowchart TD
+    subgraph ingest["Ingestion (scaffolding, Python)"]
+        TD["Twelve Data API<br/>scripts/ingest_spy.py"] --> CSV[("data/spy.csv<br/>OHLCV daily")]
+    end
+
+    CSV --> LOAD["csv_loader<br/>contract validation -> OhlcvSeries (SoA)"]
+
+    subgraph p1["Phase 1 · features"]
+        LOAD --> FEAT["compute_features — sliding window W=20<br/>realized_vol · momentum · max_drawdown · skewness<br/>(+ rel_volume at d=5, baseline 252)"]
+        FEAT --> RAW[["FeatureMatrix raw<br/>N×d row-major"]]
+    end
+
+    subgraph p2["Phase 2 · standardization"]
+        RAW --> STD["Standardizer::fit — freeze params<br/>--std=zscore | robust | none"]
+        STD --> Z[["FeatureMatrix standardized<br/>(derived; raw never mutated)"]]
+    end
+
+    subgraph p3["Phase 3 · k-NN index"]
+        Z --> IDX{"NNIndex"}
+        IDX -->|"default, exact"| BF["BruteForceIndex<br/>linear scan — the oracle"]
+        IDX -->|"--index=hnsw"| HN["HnswIndex<br/>own HNSW, recall 1.0000"]
+        BF --> KNN[["k-NN graph<br/>k neighbors + distances"]]
+        HN --> KNN
+    end
+
+    subgraph p4["Phase 4 · regime discovery"]
+        KNN --> BLK["Stage 1 · temporal blocking<br/>drop pairs with |t-s| &lt; W=20<br/>derived view; W derived, not tuned"]
+        BLK --> HDB["Stage 2 · HDBSCAN from scratch<br/>core dist -> mutual reachability -> exact MST<br/>-> condense -> excess of mass · noise is first-class"]
+        HDB --> LAB[["labels: regime id | noise"]]
+        LAB --> VAL["Stage 3 · validators (pure fns of labels)<br/>persistence · recurrence · OOS forward 20d vol"]
+    end
+
+    subgraph p5["Phase 5 · visualization"]
+        LAB --> DUMP["dump CSVs<br/>_raw · _regimes · _probe_regimes"]
+        DUMP --> BUILD["scripts/build_viz.py<br/>inline data into template"]
+        BUILD --> HTML["viz/regimes.html<br/>self-contained, no requests"]
+    end
+
+    ORA["scripts/oracle_hdbscan.py<br/>sklearn HDBSCAN, same blocked matrix"] -.->|"ARI = 1.000 (d=4) / 0.9998 (d=5)"| LAB
+    BF -.->|"recall@10 benchmark"| HN
 ```
 
 ## Phase 1: feature computation ✅
