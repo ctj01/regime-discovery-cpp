@@ -1,0 +1,6 @@
+# Normalize to LF in the repository regardless of the checkout platform:
+# the project is developed on Windows but built and tested under WSL/Linux.
+* text=auto eol=lf
+
+*.png binary
+*.csv text eol=lf

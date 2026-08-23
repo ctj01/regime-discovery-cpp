@@ -1,0 +1,28 @@
+# build trees
+build/
+build-*/
+
+# engine outputs: all derived CSVs are regenerable from data/spy.csv via the
+# CLI, so they stay out of the repo. The source data and the labels needed to
+# rebuild the viz are versioned explicitly below.
+data/*
+!data/spy.csv
+!data/sample_synthetic.csv
+!data/features_spy5_regimes.csv
+!data/features_spy5_probe_regimes.csv
+features.csv
+*_raw.csv
+*_std.csv
+*_neighbors.csv
+oracle_labels.csv
+
+# secrets — the ingestion script reads TWELVEDATA_API_KEY from the environment
+.env
+*.key
+
+# editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
